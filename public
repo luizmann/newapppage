@@ -1,1 +1,234 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8">
+  <title>Shopify CJ Page Generator Avançado</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 40px; }
+    input, button, select, textarea { padding: 10px; font-size: 16px; }
+    #images { margin: 10px 0; }
+    .product-image { max-width: 140px; margin: 4px; border: 2px solid #ccc; border-radius: 6px; }
+    .selected { border: 2px solid #0074d9; }
+    #result, #history { margin-top: 24px; }
+    textarea { width: 100%; min-height: 120px; }
+    label { margin-right: 8px; }
+    #productInfo { margin: 12px 0 12px 0; }
+    .image-checkbox { display: inline-block; text-align: center; margin: 6px; }
+    .image-checkbox input { margin-top: 5px; }
+    .history-item { margin-bottom: 7px; }
+  </style>
+</head>
+<body>
+  <h1>Shopify CJ Page Generator</h1>
+  <p>Insira o <strong>Product ID</strong> do CJ Dropshipping:</p>
+  <input type="text" id="productId" placeholder="Ex: 5f3a8574f2b0450046012e3d" size="36">
+  <button onclick="fetchProduct()" id="btnFetch" >Buscar Produto</button>
+  
+  <div id="productInfo"></div>
+  <div id="images"></div>
+  
+  <div id="tone-section" style="display:none;">
+    <label for="tone">Tom do texto:</label>
+    <select id="tone">
+      <option value="vibrante">Vibrante (impactante)</option>
+      <option value="divertido">Divertido</option>
+      <option value="formal">Formal</option>
+    </select>
+    <button onclick="generateText()" id="btnGenerateText">Gerar Texto</button>
+  </div>
+  
+  <div id="copy-section" style="display:none;">
+    <label for="copyText"><b>Prévia/Editável do texto de vendas:</b></label><br>
+    <textarea id="copyText"></textarea><br>
+    <button onclick="createPage()" id="btnCreatePage">Criar Página no Shopify</button>
+  </div>
+  
+  <div id="result"></div>
+  
+  <div id="history">
+    <h3>Histórico desta Sessão:</h3>
+    <div id="historyList"></div>
+  </div>
+  
+<script>
+let currentProduct = null;
+let selectedImages = [];
+let lastCopy = '';
+let history = [];
+
+function resetUI() {
+  document.getElementById('productInfo').innerHTML = '';
+  document.getElementById('images').innerHTML = '';
+  document.getElementById('tone-section').style.display = 'none';
+  document.getElementById('copy-section').style.display = 'none';
+  document.getElementById('result').innerHTML = '';
+  currentProduct = null;
+  selectedImages = [];
+  lastCopy = '';
+}
+  
+async function fetchProduct() {
+  resetUI();
+  const productId = document.getElementById('productId').value.trim();
+  if (!productId) {
+    alert('Por favor, insira um Product ID');
+    return;
+  }
+  document.getElementById('btnFetch').disabled = true;
+  document.getElementById('btnFetch').innerText = 'Buscando...';
+  try {
+    const res = await fetch('/api/product', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ productId })
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || "Falha ao buscar produto");
+    currentProduct = data.product;
+    selectedImages = [...data.images];
+    renderProductInfo();
+    renderImages(data.images);
+    document.getElementById('tone-section').style.display = '';
+  } catch (e) {
+    document.getElementById('result').innerHTML = `<span style="color:red;">❌ ${e.message}</span>`;
+  } finally {
+    document.getElementById('btnFetch').disabled = false;
+    document.getElementById('btnFetch').innerText = 'Buscar Produto';
+  }
+}
+
+function renderProductInfo() {
+  if (!currentProduct) return;
+  document.getElementById('productInfo').innerHTML = `
+    <b>${currentProduct.title}</b>
+    <br>
+    <span style="color:#555">${currentProduct.description}</span>
+  `;
+}
+
+function renderImages(images) {
+  if (!images || images.length === 0) {
+    document.getElementById('images').innerHTML = '<i>Nenhuma imagem encontrada.</i>';
+    return;
+  }
+  let html = `<b>Selecione as imagens que deseja usar:</b><br>`;
+  images.forEach((img, idx) => {
+    html += `<span class="image-checkbox">
+      <img src="${img}" class="product-image${selectedImages.includes(img) ? ' selected' : ''}" onclick="toggleImageSelect('${img}')"><br>
+      <input type="checkbox" ${selectedImages.includes(img) ? 'checked' : ''} onchange="toggleImageSelect('${img}')">
+    </span>`;
+  });
+  document.getElementById('images').innerHTML = html;
+}
+
+function toggleImageSelect(imgUrl) {
+  const idx = selectedImages.indexOf(imgUrl);
+  if (idx >= 0) {
+    selectedImages.splice(idx, 1);
+  } else {
+    selectedImages.push(imgUrl);
+  }
+  renderImages(currentProduct.images);
+}
+
+async function generateText() {
+  if (!currentProduct) return;
+  if (selectedImages.length === 0) {
+    alert('Selecione pelo menos uma imagem');
+    return;
+  }
+  document.getElementById('btnGenerateText').disabled = true;
+  document.getElementById('btnGenerateText').innerText = 'Gerando...';
+  const tone = document.getElementById('tone').value;
+  document.getElementById('result').innerHTML = 'Gerando texto...';
+  try {
+    const response = await fetch('/api/generate-copy', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        product: {
+          title: currentProduct.title,
+          description: currentProduct.description
+        },
+        tone
+      })
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || "Erro ao gerar texto");
+    lastCopy = data.copy;
+    document.getElementById('copyText').value = lastCopy;
+    document.getElementById('copy-section').style.display = '';
+    document.getElementById('result').innerHTML = '<span style="color:green;">Texto gerado! Você pode editar antes de criar a página.</span>';
+  } catch (e) {
+    document.getElementById('result').innerHTML = `<span style="color:red;">❌ ${e.message}</span>`;
+  } finally {
+    document.getElementById('btnGenerateText').disabled = false;
+    document.getElementById('btnGenerateText').innerText = 'Gerar Texto';
+  }
+}
+
+async function createPage() {
+  if (!currentProduct) return;
+  const copy = document.getElementById('copyText').value.trim();
+  if (!copy) {
+    alert('O texto não pode estar vazio');
+    return;
+  }
+  document.getElementById('btnCreatePage').disabled = true;
+  document.getElementById('btnCreatePage').innerText = 'Criando...';
+  document.getElementById('result').innerHTML = 'Criando página no Shopify...';
+  try {
+    const response = await fetch('/api/create-page', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        product: {
+          title: currentProduct.title
+        },
+        images: selectedImages,
+        copy
+      })
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || "Erro ao criar página");
+    document.getElementById('result').innerHTML = `<span style="color:green;">✅ Página criada!</span>
+      <br><a href="${data.page_url}" target="_blank">${data.page_url}</a>`;
+    addToHistory({
+      title: currentProduct.title,
+      url: data.page_url,
+      date: new Date().toLocaleString()
+    });
+  } catch (e) {
+    document.getElementById('result').innerHTML = `<span style="color:red;">❌ ${e.message}</span>`;
+  } finally {
+    document.getElementById('btnCreatePage').disabled = false;
+    document.getElementById('btnCreatePage').innerText = 'Criar Página no Shopify';
+  }
+}
+
+function addToHistory(entry) {
+  history.unshift(entry);
+  if (history.length > 10) history = history.slice(0,10);
+  renderHistory();
+}
+
+function renderHistory() {
+  const el = document.getElementById('historyList');
+  if (!history.length) {
+    el.innerHTML = '<i>Nenhuma página criada nesta sessão.</i>';
+    return;
+  }
+  el.innerHTML = history.map(h => `
+    <div class="history-item">
+      <b>${h.title}</b><br>
+      <a href="${h.url}" target="_blank">${h.url}</a><br>
+      <small>${h.date}</small>
+    </div>
+  `).join('');
+}
+
+window.toggleImageSelect = toggleImageSelect;
+</script>
+</body>
+</html>
 
