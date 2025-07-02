@@ -1,1 +1,177 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <title>Shopify CJ Page Generator</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 30px;
+      background-color: #f8f8f8;
+      color: #333;
+    }
+    h1 {
+      color: #0074d9;
+    }
+    .section {
+      margin-bottom: 30px;
+    }
+    label {
+      font-weight: bold;
+    }
+    input, select, textarea, button {
+      display: block;
+      margin-top: 8px;
+      margin-bottom: 15px;
+      padding: 10px;
+      width: 100%;
+      max-width: 600px;
+      font-size: 16px;
+    }
+    button {
+      background-color: #0074d9;
+      color: #fff;
+      border: none;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #005fa3;
+    }
+    .image-thumb {
+      max-width: 120px;
+      margin: 5px;
+      cursor: pointer;
+      border: 2px solid transparent;
+      transition: border 0.2s ease;
+    }
+    .selected {
+      border-color: #0074d9;
+    }
+    #result {
+      background-color: #fff;
+      padding: 15px;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+      max-width: 700px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Shopify CJ Page Generator</h1>
+
+  <div class="section">
+    <label for="productId">ID do Produto (CJ):</label>
+    <input type="text" id="productId" placeholder="Ex: CJD123456789">
+    <button onclick="fetchProduct()">🔍 Buscar Produto</button>
+  </div>
+
+  <div id="productInfo" class="section" style="display:none;">
+    <div id="images" class="section"></div>
+
+    <div id="tone-section" class="section">
+      <label for="tone">Tom do texto:</label>
+      <select id="tone">
+        <option value="vibrante">Vibrante</option>
+        <option value="divertido">Divertido</option>
+        <option value="formal">Formal</option>
+      </select>
+      <button onclick="generateCopy()">✨ Gerar Texto com IA</button>
+    </div>
+
+    <div id="copy-section" class="section">
+      <label for="copyText">Texto de vendas gerado:</label>
+      <textarea id="copyText" rows="8" placeholder="Aguardando IA..."></textarea>
+      <button onclick="createShopifyPage()">🚀 Criar Página no Shopify</button>
+    </div>
+  </div>
+
+  <div id="result" class="section"></div>
+
+  <script>
+    let currentProduct = null;
+    let selectedImages = [];
+
+    function renderImages(images) {
+      const container = document.getElementById('images');
+      container.innerHTML = '<b>Selecione as imagens que deseja usar:</b><br>';
+      images.forEach(url => {
+        const img = document.createElement('img');
+        img.src = url;
+        img.className = 'image-thumb';
+        img.onclick = () => {
+          img.classList.toggle('selected');
+          if (selectedImages.includes(url)) {
+            selectedImages = selectedImages.filter(i => i !== url);
+          } else {
+            selectedImages.push(url);
+          }
+        };
+        container.appendChild(img);
+      });
+    }
+
+    async function fetchProduct() {
+      const productId = document.getElementById('productId').value.trim();
+      if (!productId) return alert("Por favor, insira o ID do produto.");
+
+      const res = await fetch('/api/product', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ productId })
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        currentProduct = data.product;
+        selectedImages = [];
+        document.getElementById('productInfo').style.display = 'block';
+        renderImages(data.images);
+        document.getElementById('copyText').value = '';
+        document.getElementById('result').innerHTML = '';
+      } else {
+        alert(data.message || 'Erro ao buscar produto.');
+      }
+    }
+
+    async function generateCopy() {
+      const tone = document.getElementById('tone').value;
+      if (!currentProduct) return alert("Nenhum produto carregado.");
+
+      const res = await fetch('/api/generate-copy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ product: currentProduct, tone })
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        document.getElementById('copyText').value = data.copy;
+      } else {
+        alert(data.message || 'Erro ao gerar copy.');
+      }
+    }
+
+    async function createShopifyPage() {
+      const copy = document.getElementById('copyText').value.trim();
+      if (!copy) return alert("O texto de vendas está vazio.");
+
+      const res = await fetch('/api/create-page', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ product: currentProduct, images: selectedImages, copy })
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        document.getElementById('result').innerHTML = `
+          ✅ Página criada com sucesso: <br>
+          <a href="${data.page_url}" target="_blank">${data.page_url}</a>
+        `;
+      } else {
+        alert(data.message || 'Erro ao criar página.');
+      }
+    }
+  </script>
+</body>
+</html>
 
